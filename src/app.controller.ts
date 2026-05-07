@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query, ParseFloatPipe } from '@nestjs/common';
 import { AppService } from './app.service';
 
 @Controller()
@@ -8,5 +8,13 @@ export class AppController {
   @Get()
   getHello(): { message: string } {
     return this.appService.getHello();
+  }
+
+  @Get('add')
+  add(
+    @Query('num1', ParseFloatPipe) num1: number,
+    @Query('num2', ParseFloatPipe) num2: number,
+  ): { result: number } {
+    return this.appService.add(num1, num2);
   }
 }
