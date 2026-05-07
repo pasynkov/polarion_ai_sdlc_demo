@@ -1,12 +1,5 @@
 ---
 mode: agent
-tools:
-  - polarion_get_workitem
-  - polarion_update_workitem
-  - run_in_terminal
-  - create_file
-  - read_file
-  - replace_string_in_file
 ---
 
 Implement task **${input:workitem_id: Enter workitem ID (e.g. 219E-509)}**.

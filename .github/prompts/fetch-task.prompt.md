@@ -1,7 +1,5 @@
 ---
 mode: agent
-tools:
-  - polarion_get_workitem
 ---
 
 Fetch task **${input:workitem_id: Enter workitem ID (e.g. 219E-509)}** from Polarion.

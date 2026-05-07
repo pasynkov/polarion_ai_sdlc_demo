@@ -1,8 +1,5 @@
 ---
 mode: agent
-tools:
-  - polarion_get_workitem
-  - polarion_create_workitem
 ---
 
 Design task **${input:workitem_id: Enter workitem ID (e.g. 219E-509)}**.
