@@ -104,17 +104,23 @@ server.tool(
 
     if (linked?.data?.length) {
       // ID format: projectId/wiId/role/projectId/linkedWiId
-      const linkedDetails = await Promise.all(
-        linked.data
-          .filter((l) => l.id?.includes("/verifies/"))
-          .map((l) => {
-            const linkedId = l.id.split("/").pop();
-            return polarionGet(`/projects/${PROJECT}/workitems/${linkedId}?fields%5Bworkitems%5D=${FIELDS}`);
-          })
-      );
-      if (linkedDetails.length) {
+      const fetch2 = (l) => {
+        const linkedId = l.id.split("/").pop();
+        return polarionGet(`/projects/${PROJECT}/workitems/${linkedId}?fields%5Bworkitems%5D=${FIELDS}`);
+      };
+
+      const acItems = linked.data.filter((l) => l.id?.includes("/verifies/"));
+      const specItems = linked.data.filter((l) => l.id?.includes("/has_specification/"));
+
+      if (acItems.length) {
+        const details = await Promise.all(acItems.map(fetch2));
         text += "\n\n=== ACCEPTANCE CRITERIA ===\n";
-        text += linkedDetails.map((d) => formatWorkitem(d.data)).join("\n\n---\n\n");
+        text += details.map((d) => formatWorkitem(d.data)).join("\n\n---\n\n");
+      }
+      if (specItems.length) {
+        const details = await Promise.all(specItems.map(fetch2));
+        text += "\n\n=== SPECIFICATION ===\n";
+        text += details.map((d) => formatWorkitem(d.data)).join("\n\n---\n\n");
       }
     }
 
@@ -177,8 +183,9 @@ server.tool(
     description: z.string().describe("HTML or plain text description"),
     parent_id: z.string().optional().describe("Parent workitem ID to link to (e.g. 219E-509)"),
     link_role: z.string().optional().describe("Link role e.g. 'has_specification', 'verifies'. Default: has_specification"),
+    status: z.string().optional().describe("Initial status e.g. open, draft, inProgress. Default: open"),
   },
-  async ({ type, title, description, parent_id, link_role }) => {
+  async ({ type, title, description, parent_id, link_role, status }) => {
     const res = await fetch(`${BASE}/projects/${PROJECT}/workitems`, {
       method: "POST",
       headers: headers(),
@@ -189,7 +196,7 @@ server.tool(
             type,
             title,
             description: { type: "text/html", value: description },
-            status: "open",
+            status: status || "open",
           },
         }],
       }),
