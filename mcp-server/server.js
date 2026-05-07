@@ -90,15 +90,35 @@ server.tool(
 
 server.tool(
   "get_workitem",
-  "Get full details of a Polarion workitem by ID (e.g. 219E-42)",
+  "Get full details of a Polarion workitem by ID including linked testcases (Acceptance Criteria)",
   {
     id: z.string().describe("Workitem ID e.g. 219E-42"),
   },
   async ({ id }) => {
-    const data = await polarionGet(
-      `/projects/${PROJECT}/workitems/${id}?fields%5Bworkitems%5D=${FIELDS}`
-    );
-    return { content: [{ type: "text", text: formatWorkitem(data.data) }] };
+    const [data, linked] = await Promise.all([
+      polarionGet(`/projects/${PROJECT}/workitems/${id}?fields%5Bworkitems%5D=${FIELDS}`),
+      polarionGet(`/projects/${PROJECT}/workitems/${id}/linkedworkitems`).catch(() => null),
+    ]);
+
+    let text = formatWorkitem(data.data);
+
+    if (linked?.data?.length) {
+      // ID format: projectId/wiId/role/projectId/linkedWiId
+      const linkedDetails = await Promise.all(
+        linked.data
+          .filter((l) => l.id?.includes("/verifies/"))
+          .map((l) => {
+            const linkedId = l.id.split("/").pop();
+            return polarionGet(`/projects/${PROJECT}/workitems/${linkedId}?fields%5Bworkitems%5D=${FIELDS}`);
+          })
+      );
+      if (linkedDetails.length) {
+        text += "\n\n=== ACCEPTANCE CRITERIA ===\n";
+        text += linkedDetails.map((d) => formatWorkitem(d.data)).join("\n\n---\n\n");
+      }
+    }
+
+    return { content: [{ type: "text", text }] };
   }
 );
 
