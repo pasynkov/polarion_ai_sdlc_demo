@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "polarion": {
+      "command": "node",
+      "args": ["mcp-server/server.js"],
+      "env": {
+        "PALARION_PAT": "${PALARION_PAT}",
+        "POLARION_PROJECT_ID": "219ef27129fd43fa91af0b441e13fdba"
+      }
+    }
+  }
+}

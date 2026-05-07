@@ -1,0 +1,71 @@
+name: Sync to Polarion
+
+on:
+  pull_request:
+    types: [opened, reopened]
+  push:
+    branches: [main, master]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract Polarion workitem ID
+        id: extract
+        run: |
+          # Look for pattern like 219E-123 in branch name or PR title
+          TEXT="${{ github.head_ref || github.ref_name }} ${{ github.event.pull_request.title || github.event.head_commit.message }}"
+          ID=$(echo "$TEXT" | grep -oE '[0-9]+E-[0-9]+' | head -1)
+          echo "workitem_id=$ID" >> $GITHUB_OUTPUT
+          echo "Found workitem ID: $ID"
+
+      - name: Update Polarion on PR opened
+        if: github.event_name == 'pull_request' && steps.extract.outputs.workitem_id != ''
+        env:
+          PAT: ${{ secrets.POLARION_PAT }}
+          PROJECT: 219ef27129fd43fa91af0b441e13fdba
+          WI_ID: ${{ steps.extract.outputs.workitem_id }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # Fetch current description
+          CURRENT=$(curl -s \
+            -H "Authorization: Bearer $PAT" \
+            -H "Accept: application/json" \
+            "https://testdrive.polarion.com/polarion/rest/v1/projects/$PROJECT/workitems/$WI_ID?fields%5Bworkitems%5D=description" \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['data']['attributes'].get('description',{}).get('value',''))" 2>/dev/null || echo "")
+
+          APPEND="<p><strong>PR:</strong> <a href=\"$PR_URL\">$PR_TITLE</a></p>"
+
+          # Update status to inProgress + append PR link
+          curl -s -o /dev/null -w "%{http_code}" -X PATCH \
+            -H "Authorization: Bearer $PAT" \
+            -H "Content-Type: application/json" \
+            "https://testdrive.polarion.com/polarion/rest/v1/projects/$PROJECT/workitems/$WI_ID" \
+            -d "{\"data\":{\"type\":\"workitems\",\"id\":\"$PROJECT/$WI_ID\",\"attributes\":{\"status\":\"inProgress\",\"description\":{\"type\":\"text/html\",\"value\":\"$CURRENT$APPEND\"}}}}"
+
+      - name: Update Polarion on merge to main
+        if: github.event_name == 'push' && steps.extract.outputs.workitem_id != ''
+        env:
+          PAT: ${{ secrets.POLARION_PAT }}
+          PROJECT: 219ef27129fd43fa91af0b441e13fdba
+          WI_ID: ${{ steps.extract.outputs.workitem_id }}
+          COMMIT_SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          COMMIT_URL="https://github.com/$REPO/commit/$COMMIT_SHA"
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+
+          CURRENT=$(curl -s \
+            -H "Authorization: Bearer $PAT" \
+            -H "Accept: application/json" \
+            "https://testdrive.polarion.com/polarion/rest/v1/projects/$PROJECT/workitems/$WI_ID?fields%5Bworkitems%5D=description" \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['data']['attributes'].get('description',{}).get('value',''))" 2>/dev/null || echo "")
+
+          APPEND="<p><strong>Merged:</strong> <a href=\"$COMMIT_URL\">$SHORT_SHA</a></p>"
+
+          curl -s -o /dev/null -w "%{http_code}" -X PATCH \
+            -H "Authorization: Bearer $PAT" \
+            -H "Content-Type: application/json" \
+            "https://testdrive.polarion.com/polarion/rest/v1/projects/$PROJECT/workitems/$WI_ID" \
+            -d "{\"data\":{\"type\":\"workitems\",\"id\":\"$PROJECT/$WI_ID\",\"attributes\":{\"status\":\"done\",\"description\":{\"type\":\"text/html\",\"value\":\"$CURRENT$APPEND\"}}}}"
