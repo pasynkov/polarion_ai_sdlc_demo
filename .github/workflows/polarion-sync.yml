@@ -13,7 +13,6 @@ jobs:
       - name: Extract Polarion workitem ID
         id: extract
         run: |
-          # Look for pattern like 219E-123 in branch name or PR title
           TEXT="${{ github.head_ref || github.ref_name }} ${{ github.event.pull_request.title || github.event.head_commit.message }}"
           ID=$(echo "$TEXT" | grep -oE '[0-9]+E-[0-9]+' | head -1)
           echo "workitem_id=$ID" >> $GITHUB_OUTPUT
@@ -28,7 +27,6 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          # Fetch current description
           CURRENT=$(curl -s \
             -H "Authorization: Bearer $PAT" \
             -H "Accept: application/json" \
@@ -37,12 +35,17 @@ jobs:
 
           APPEND="<p><strong>PR:</strong> <a href=\"$PR_URL\">$PR_TITLE</a></p>"
 
-          # Update status to inProgress + append PR link
+          BODY=$(jq -n \
+            --arg project "$PROJECT" \
+            --arg wi_id "$WI_ID" \
+            --arg html "${CURRENT}${APPEND}" \
+            '{data:{type:"workitems",id:($project+"/"+$wi_id),attributes:{status:"inProgress",description:{type:"text/html",value:$html}}}}')
+
           curl -s -o /dev/null -w "%{http_code}" -X PATCH \
             -H "Authorization: Bearer $PAT" \
             -H "Content-Type: application/json" \
             "https://testdrive.polarion.com/polarion/rest/v1/projects/$PROJECT/workitems/$WI_ID" \
-            -d "{\"data\":{\"type\":\"workitems\",\"id\":\"$PROJECT/$WI_ID\",\"attributes\":{\"status\":\"inProgress\",\"description\":{\"type\":\"text/html\",\"value\":\"$CURRENT$APPEND\"}}}}"
+            -d "$BODY"
 
       - name: Update Polarion on merge to main
         if: github.event_name == 'push' && steps.extract.outputs.workitem_id != ''
@@ -64,8 +67,14 @@ jobs:
 
           APPEND="<p><strong>Merged:</strong> <a href=\"$COMMIT_URL\">$SHORT_SHA</a></p>"
 
+          BODY=$(jq -n \
+            --arg project "$PROJECT" \
+            --arg wi_id "$WI_ID" \
+            --arg html "${CURRENT}${APPEND}" \
+            '{data:{type:"workitems",id:($project+"/"+$wi_id),attributes:{status:"done",description:{type:"text/html",value:$html}}}}')
+
           curl -s -o /dev/null -w "%{http_code}" -X PATCH \
             -H "Authorization: Bearer $PAT" \
             -H "Content-Type: application/json" \
             "https://testdrive.polarion.com/polarion/rest/v1/projects/$PROJECT/workitems/$WI_ID" \
-            -d "{\"data\":{\"type\":\"workitems\",\"id\":\"$PROJECT/$WI_ID\",\"attributes\":{\"status\":\"done\",\"description\":{\"type\":\"text/html\",\"value\":\"$CURRENT$APPEND\"}}}}"
+            -d "$BODY"
