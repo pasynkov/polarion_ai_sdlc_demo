@@ -2,7 +2,7 @@
 mode: agent
 ---
 
-Design task **${input:workitem_id: Enter workitem ID (e.g. 219E-509)}**.
+Design task **${input:workitem_id: Enter workitem ID (e.g. 219E-513)}**.
 
 ## Steps
 
@@ -10,7 +10,7 @@ Design task **${input:workitem_id: Enter workitem ID (e.g. 219E-509)}**.
 2. Generate a technical specification:
    - **Goal**: one sentence
    - **Stack**: languages, frameworks, versions
-   - **File structure**: list files to create with purpose
+   - **File structure**: list files to create/modify with purpose
    - **Interfaces / API**: endpoints or function signatures
    - **How AC will be satisfied**: map each criterion to implementation detail
 3. **Stop and present the spec to the user. Wait for approval.**
@@ -20,4 +20,5 @@ Design task **${input:workitem_id: Enter workitem ID (e.g. 219E-509)}**.
    - `description`: the full spec as HTML
    - `parent_id`: the workitem ID
    - `link_role`: `has_specification`
+   - `status`: `draft`
 5. Report the created specification ID and URL
