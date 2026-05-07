@@ -13,12 +13,12 @@ Implement task **${input:workitem_id: Enter workitem ID (e.g. 219E-509)}**.
 
 ## Steps
 
-1. Call `get_workitem` to load the task and Acceptance Criteria
-2. Create a feature branch: `git checkout -b feature/${input:workitem_id}-<short-slug>`
-3. Implement the solution — satisfy every Acceptance Criterion, nothing more
-4. Verify: run the server, confirm it satisfies all AC (e.g. curl returns 200)
-5. Commit with workitem ID in message: `git commit -m "feat: <description> ${input:workitem_id}"`
-6. Push the branch: `git push -u origin HEAD`
-7. Call `update_workitem` to set status → `inProgress`
-
-After push, create a PR via `gh pr create` with `${input:workitem_id}` in the title.
+1. Call `get_workitem` to load task, Acceptance Criteria, and linked specification
+2. If no specification found — stop and ask user to run `/design-task` first
+3. Create feature branch: `git checkout -b feature/${input:workitem_id}-<short-slug>`
+4. Implement strictly according to the specification — no extras
+5. Verify each Acceptance Criterion (e.g. `curl -s -o /dev/null -w "%{http_code}" http://localhost:8080` returns 200)
+6. Commit with workitem ID: `git commit -m "feat: <description> ${input:workitem_id}"`
+7. Push: `git push -u origin HEAD`
+8. Create PR via `gh pr create --title "feat: <description> ${input:workitem_id}" --body "Closes ${input:workitem_id}"`
+9. Call `update_workitem` — set status `inProgress`

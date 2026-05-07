@@ -168,5 +168,62 @@ server.tool(
   }
 );
 
+server.tool(
+  "create_workitem",
+  "Create a new workitem in Polarion and optionally link it to a parent workitem",
+  {
+    type: z.string().describe("Workitem type: task, requirement, testcase, specification"),
+    title: z.string().describe("Title of the workitem"),
+    description: z.string().describe("HTML or plain text description"),
+    parent_id: z.string().optional().describe("Parent workitem ID to link to (e.g. 219E-509)"),
+    link_role: z.string().optional().describe("Link role e.g. 'has_specification', 'verifies'. Default: has_specification"),
+  },
+  async ({ type, title, description, parent_id, link_role }) => {
+    const res = await fetch(`${BASE}/projects/${PROJECT}/workitems`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({
+        data: [{
+          type: "workitems",
+          attributes: {
+            type,
+            title,
+            description: { type: "text/html", value: description },
+            status: "open",
+          },
+        }],
+      }),
+    });
+    if (!res.ok) throw new Error(`Create failed ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    const newId = data.data[0].id.split("/").pop();
+    const url = data.data[0].links.portal;
+
+    if (parent_id) {
+      const role = link_role || "has_specification";
+      await fetch(`${BASE}/projects/${PROJECT}/workitems/${parent_id}/linkedworkitems`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          data: [{
+            type: "linkedworkitems",
+            attributes: { role },
+            relationships: {
+              workItem: { data: { type: "workitems", id: `${PROJECT}/${newId}` } },
+            },
+          }],
+        }),
+      });
+    }
+
+    return {
+      content: [{
+        type: "text",
+        text: `Created ${newId}${parent_id ? ` linked to ${parent_id}` : ""}.\nURL: ${url}`,
+      }],
+    };
+  }
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
