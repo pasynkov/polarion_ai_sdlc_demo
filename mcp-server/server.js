@@ -130,14 +130,15 @@ server.tool(
 
 server.tool(
   "update_workitem",
-  "Update a Polarion workitem: change status and/or append a link (e.g. PR or commit URL) to description",
+  "Update a Polarion workitem: change status, append a link to description, or add a hyperlink to the Links tab",
   {
     id: z.string().describe("Workitem ID e.g. 219E-42"),
     status: z.string().optional().describe("New status e.g. inProgress, done, verified"),
     link_url: z.string().optional().describe("PR or commit URL to append to description"),
     link_label: z.string().optional().describe("Label for the link e.g. 'PR #42' or 'Commit abc123'"),
+    hyperlink_url: z.string().optional().describe("URL to add to the workitem's Links tab (ref_ext role)"),
   },
-  async ({ id, status, link_url, link_label }) => {
+  async ({ id, status, link_url, link_label, hyperlink_url }) => {
     const attributes = {};
 
     if (status) {
@@ -145,7 +146,6 @@ server.tool(
     }
 
     if (link_url) {
-      // Fetch current description first
       const current = await polarionGet(
         `/projects/${PROJECT}/workitems/${id}?fields%5Bworkitems%5D=description`
       );
@@ -158,8 +158,12 @@ server.tool(
       };
     }
 
+    if (hyperlink_url) {
+      attributes.hyperlinks = [{ role: "ref_ext", uri: hyperlink_url }];
+    }
+
     if (!Object.keys(attributes).length) {
-      return { content: [{ type: "text", text: "Nothing to update — provide status or link_url." }] };
+      return { content: [{ type: "text", text: "Nothing to update — provide status, link_url, or hyperlink_url." }] };
     }
 
     await polarionPatch(`/projects/${PROJECT}/workitems/${id}`, {
@@ -178,7 +182,7 @@ server.tool(
   "create_workitem",
   "Create a new workitem in Polarion and optionally link it to a parent workitem",
   {
-    type: z.string().describe("Workitem type: task, requirement, testcase, specification"),
+    type: z.string().describe("Workitem type: task, requirement, testcase, systemrequirement, softwarerequirement, systemtestcase, softwaretestcase, risk, release, specification"),
     title: z.string().describe("Title of the workitem"),
     description: z.string().describe("HTML or plain text description"),
     parent_id: z.string().optional().describe("Parent workitem ID to link to (e.g. 219E-509)"),
@@ -208,7 +212,8 @@ server.tool(
 
     if (parent_id) {
       const role = link_role || "has_specification";
-      await fetch(`${BASE}/projects/${PROJECT}/workitems/${parent_id}/linkedworkitems`, {
+      // Link FROM newId TO parent_id to avoid race condition when parallel-creating siblings
+      await fetch(`${BASE}/projects/${PROJECT}/workitems/${newId}/linkedworkitems`, {
         method: "POST",
         headers: headers(),
         body: JSON.stringify({
@@ -216,7 +221,7 @@ server.tool(
             type: "linkedworkitems",
             attributes: { role },
             relationships: {
-              workItem: { data: { type: "workitems", id: `${PROJECT}/${newId}` } },
+              workItem: { data: { type: "workitems", id: `${PROJECT}/${parent_id}` } },
             },
           }],
         }),
@@ -229,6 +234,55 @@ server.tool(
         text: `Created ${newId}${parent_id ? ` linked to ${parent_id}` : ""}.\nURL: ${url}`,
       }],
     };
+  }
+);
+
+server.tool(
+  "list_wiki_pages",
+  "List all wiki pages (documents) in a Polarion space",
+  {
+    space: z.string().describe("Space/folder name e.g. 'Requirements'"),
+  },
+  async ({ space }) => {
+    const data = await polarionGet(
+      `/projects/${PROJECT}/spaces/${space}/documents?fields%5Bdocuments%5D=id,title,name`
+    );
+
+    if (!data.data?.length) return { content: [{ type: "text", text: "No documents found." }] };
+
+    const lines = data.data.map((d) => {
+      const a = d.attributes || {};
+      const name = d.id?.split("/").pop() || "";
+      return `- ${a.title || name}  →  page: "${name}"`;
+    });
+
+    return { content: [{ type: "text", text: lines.join("\n") }] };
+  }
+);
+
+server.tool(
+  "get_wiki_page",
+  "Get content of a Polarion wiki page (document) by space and page name",
+  {
+    space: z.string().describe("Space/folder name e.g. 'Requirements'"),
+    page: z.string().describe("Page/document name e.g. 'Template_Customer_Requirements_Specification'"),
+  },
+  async ({ space, page }) => {
+    const fields = "id,title,homePageContent,outlineNumbering";
+    const data = await polarionGet(
+      `/projects/${PROJECT}/spaces/${space}/documents/${page}?fields%5Bdocuments%5D=${fields}`
+    );
+
+    const a = data.data?.attributes || {};
+    const content = a.homePageContent?.value || "";
+    const plain = content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+    const url = `https://testdrive.polarion.com/polarion/redirect/project/${PROJECT}/wiki?spaceId=${space}&documentId=${page}`;
+    const text = [`Title: ${a.title || page}`, `URL: ${url}`, "", plain]
+      .filter((l) => l !== null)
+      .join("\n");
+
+    return { content: [{ type: "text", text }] };
   }
 );
 
